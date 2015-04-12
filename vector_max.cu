@@ -106,6 +106,84 @@ __global__ void vector_max_kernel(float *in, float *out, int N) {
     }
 }
 
+__global__ void vector_max_kernel2(float *in, float *out, int N) {
+
+    __shared__ float sbuf[threads_per_block];
+
+    // Determine the "flattened" block id and thread id
+    int block_id = blockIdx.x + gridDim.x * blockIdx.y;
+    int thread_id = blockDim.x * block_id + threadIdx.x;
+
+    // each thread copies its value from global to shared
+    sbuf[threadIdx.x] = in[thread_id];
+    __syncthreads();
+
+    // A single "lead" thread in each block finds the maximum value over a range of size threads_per_block
+    float max = 0.0;
+    if (threadIdx.x == 0) {
+
+        //calculate out of bounds guard
+        //our block size will be 256, but our vector may not be a multiple of 256!
+        int end = threads_per_block;
+        if(thread_id + threads_per_block > N)
+            end = N - thread_id;
+
+        //grab the lead thread's value
+        max = sbuf[threadIdx.x];
+
+        //grab values from all other threads' locations
+        for(int i = 1; i < end; i++) {
+            //if larger, replace
+            if(max < sbuf[threadIdx.x + i])
+                max = sbuf[threadIdx.x + i];
+        }
+
+        out[block_id] = max;
+
+    }
+}
+
+__global__ void vector_max_kernel3(float *in, float *out, int N) {
+
+    __shared__ float sbuf[threads_per_block];
+    __shared__ int end;
+
+    // Determine the "flattened" block id and thread id
+    int block_id = blockIdx.x + gridDim.x * blockIdx.y;
+    int thread_id = blockDim.x * block_id + threadIdx.x;
+
+    // initialize the whole shared memory to 0
+    sbuf[threadIdx.x] = 0;
+
+    // each thread copies its value from global to shared
+    sbuf[threadIdx.x] = in[thread_id];
+    __syncthreads();
+
+    //calculate out of bounds guard
+    //our block size will be 256, but our vector may not be a multiple of 256!
+    if (threadIdx.x == 0) {
+        end = threads_per_block;
+        if (thread_id + threads_per_block > N)
+            end = N - thread_id;
+        // make sure end is even
+        if (end % 2 != 0)
+            end += 1;
+    }
+    __syncthreads();
+
+    for (int i = 1; i < end; i *= 2) {
+        if (threadIdx.x % (2*i) == 0) {
+            // since rest of sbuf[] is filled with zero, it's safe to compare
+            if (sbuf[threadIdx.x] < sbuf[threadIdx.x + i])
+                sbuf[threadIdx.x] = sbuf[threadIdx.x + i];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0)
+        out[block_id] = sbuf[0];
+}
+
 // Returns the maximum value within a vector of length N
 float GPU_vector_max(float *in_CPU, int N, int kernel_code) {
 
@@ -147,11 +225,11 @@ float GPU_vector_max(float *in_CPU, int N, int kernel_code) {
             break;
         case 2 :
             //LAUNCH KERNEL FROM PROBLEM 2 HERE
-            die("KERNEL NOT IMPLEMENTED YET\n");
+            vector_max_kernel2 <<< grid_size , threads_per_block >>> (in_GPU, out_GPU, N);
             break;
         case 3 :
             //LAUNCH KERNEL FROM PROBLEM 3 HERE
-            die("KERNEL NOT IMPLEMENTED YET\n");
+            vector_max_kernel3 <<< grid_size , threads_per_block >>> (in_GPU, out_GPU, N);
             break;
         case 4 :
             //LAUNCH KERNEL FROM PROBLEM 4 HERE
