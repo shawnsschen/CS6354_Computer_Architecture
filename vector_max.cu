@@ -127,55 +127,58 @@ float GPU_vector_max(float *in_CPU, int N, int kernel_code) {
     cudaDeviceSynchronize();  // this is only needed for timing purposes
     stop_timer(memory_start_time, "\nGPU:\t  Transfer to GPU");
 
-bool final = false;
-while (!final) {
-    // Determine the number of thread blocks in the x- and y-dimension
-    int num_blocks = (int) ((float) (N + threads_per_block - 1) / (float) threads_per_block);
-    int max_blocks_per_dimension = 65535;
-    int num_blocks_y = (int) ((float) (num_blocks + max_blocks_per_dimension - 1) / (float) max_blocks_per_dimension);
-    int num_blocks_x = (int) ((float) (num_blocks + num_blocks_y - 1) / (float) num_blocks_y);
-    dim3 grid_size(num_blocks_x, num_blocks_y, 1);
+    bool final = false;
+    // loop terminates only when the last single block is finished
+    while (!final) {
+        // Determine the number of thread blocks in the x- and y-dimension
+        int num_blocks = (int) ((float) (N + threads_per_block - 1) / (float) threads_per_block);
+        int max_blocks_per_dimension = 65535;
+        int num_blocks_y = (int) ((float) (num_blocks + max_blocks_per_dimension - 1) / (float) max_blocks_per_dimension);
+        int num_blocks_x = (int) ((float) (num_blocks + num_blocks_y - 1) / (float) num_blocks_y);
+        dim3 grid_size(num_blocks_x, num_blocks_y, 1);
 
-    // Execute the kernel to compute the vector sum on the GPU
-    long long kernel_start_time;
-    kernel_start_time = start_timer();
+        // Execute the kernel to compute the vector sum on the GPU
+        long long kernel_start_time;
+        kernel_start_time = start_timer();
 
-    switch(kernel_code){
-    case 1 :
-        vector_max_kernel <<< grid_size , threads_per_block >>> (in_GPU, out_GPU, N);
+        switch(kernel_code){
+        case 1 :
+            vector_max_kernel <<< grid_size , threads_per_block >>> (in_GPU, out_GPU, N);
+            break;
+        case 2 :
+            //LAUNCH KERNEL FROM PROBLEM 2 HERE
+            die("KERNEL NOT IMPLEMENTED YET\n");
+            break;
+        case 3 :
+            //LAUNCH KERNEL FROM PROBLEM 3 HERE
+            die("KERNEL NOT IMPLEMENTED YET\n");
+            break;
+        case 4 :
+            //LAUNCH KERNEL FROM PROBLEM 4 HERE
+            die("KERNEL NOT IMPLEMENTED YET\n");
+            break;
+        default :
+            die("INVALID KERNEL CODE\n");
+        }
 
-        break;
-    case 2 :
-        //LAUNCH KERNEL FROM PROBLEM 2 HERE
-        die("KERNEL NOT IMPLEMENTED YET\n");
-        break;
-    case 3 :
-        //LAUNCH KERNEL FROM PROBLEM 3 HERE
-        die("KERNEL NOT IMPLEMENTED YET\n");
-        break;
-    case 4 :
-        //LAUNCH KERNEL FROM PROBLEM 4 HERE
-        die("KERNEL NOT IMPLEMENTED YET\n");
-        break;
-    default :
-        die("INVALID KERNEL CODE\n");
+        if (num_blocks > 1) {
+            // num_block > 1 means there are multiple local max values
+            // hence needs to launch kernals again to search among these max values.
+            final = false;
+            N = num_blocks;
+            cudaMemcpy(in_GPU, out_GPU, vector_size, cudaMemcpyDeviceToDevice);
+            cudaDeviceSynchronize();
+        }
+        else {
+            final = true;
+        }
+
+        cudaDeviceSynchronize();  // this is only needed for timing purposes
+        // kernel execution time actually includes device-to-device copying time
+        stop_timer(kernel_start_time, "\t Kernel execution");
+
+        checkError();
     }
-
-    if (num_blocks > 1) {
-        final = false;
-        N = num_blocks;
-        cudaMemcpy(in_GPU, out_GPU, vector_size, cudaMemcpyDeviceToDevice);
-        cudaDeviceSynchronize();
-    }
-    else {
-        final = true;
-    }
-
-    cudaDeviceSynchronize();  // this is only needed for timing purposes
-    stop_timer(kernel_start_time, "\t Kernel execution");
-
-    checkError();
-}
 
     // Transfer the result from the GPU to the CPU
     memory_start_time = start_timer();
