@@ -6,6 +6,7 @@
 count=0
 while [ $count -lt 100 ]; do
     size=`shuf -i 1-16000000 -n 1`
-    ./vector_max $size -k 1
+    echo $size
+    ./vector_max $size -k 4
     let count+=1
 done
