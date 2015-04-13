@@ -184,6 +184,49 @@ __global__ void vector_max_kernel3(float *in, float *out, int N) {
         out[block_id] = sbuf[0];
 }
 
+__global__ void vector_max_kernel4(float *in, float *out, int N) {
+
+    __shared__ float sbuf[threads_per_block];
+    __shared__ int end;
+
+    // Determine the "flattened" block id and thread id
+    int block_id = blockIdx.x + gridDim.x * blockIdx.y;
+    int thread_id = blockDim.x * block_id + threadIdx.x;
+
+    // initialize the whole shared memory to 0
+    sbuf[threadIdx.x] = 0;
+
+    // each thread copies its value from global to shared
+    sbuf[threadIdx.x] = in[thread_id];
+    __syncthreads();
+
+    //calculate out of bounds guard
+    //our block size will be 256, but our vector may not be a multiple of 256!
+    if (threadIdx.x == 0) {
+        end = threads_per_block;
+        if (thread_id + threads_per_block > N)
+            end = N - thread_id;
+        // round up to a power of 2
+        end = (int)powf(2, ceilf(log2f((float)end)));
+    }
+    __syncthreads();
+
+    int range = end;
+    while (range > 1) {
+        // cut the whole block into lower half and higher half
+        if (threadIdx.x < range/2) {
+            // since rest of sbuf[] is filled with zero, it's safe to compare
+            if (sbuf[threadIdx.x] < sbuf[threadIdx.x + range/2])
+                sbuf[threadIdx.x] = sbuf[threadIdx.x + range/2];
+        }
+        range /= 2;
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0)
+        out[block_id] = sbuf[0];
+}
+
 // Returns the maximum value within a vector of length N
 float GPU_vector_max(float *in_CPU, int N, int kernel_code) {
 
@@ -233,7 +276,7 @@ float GPU_vector_max(float *in_CPU, int N, int kernel_code) {
             break;
         case 4 :
             //LAUNCH KERNEL FROM PROBLEM 4 HERE
-            die("KERNEL NOT IMPLEMENTED YET\n");
+            vector_max_kernel4 <<< grid_size , threads_per_block >>> (in_GPU, out_GPU, N);
             break;
         default :
             die("INVALID KERNEL CODE\n");
