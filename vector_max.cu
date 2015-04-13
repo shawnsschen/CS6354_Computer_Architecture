@@ -4,6 +4,7 @@
 #include <cfloat>
 
 //VERSION 1.4 MODIFIED 7/8 13:08 by Jack
+//Modified by: Shawn, sc7cq(#)virginia.edu
 
 // The number of threads per blocks in the kernel
 // (if we define it here, then we can use its value in the kernel,
